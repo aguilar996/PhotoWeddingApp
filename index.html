@@ -6,117 +6,66 @@
   <meta name="robots" content="noindex, nofollow">
   <meta name="theme-color" content="#FBF8F2">
   <title>Nuestro gran día</title>
-  <style>
-    :root {
-      --ivory: #FBF8F2;
-      --cream: #F3ECE0;
-      --beige: #E4D8C6;
-      --taupe: #8C7B6B;
-      --earth: #5A4A3C;
-      --ink: #3A3029;
-    }
-    * { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; }
-    body {
-      min-height: 100vh;
-      background: var(--ivory);
-      color: var(--ink);
-      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 56px 24px calc(56px + env(safe-area-inset-bottom));
-      -webkit-font-smoothing: antialiased;
-    }
-    main { width: 100%; max-width: 520px; text-align: center; }
-    .eyebrow {
-      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
-      font-size: 11px;
-      letter-spacing: 0.32em;
-      text-transform: uppercase;
-      color: var(--taupe);
-      margin: 0 0 32px;
-    }
-    h1 {
-      font-weight: 400;
-      font-size: clamp(42px, 11vw, 64px);
-      line-height: 1.05;
-      color: var(--earth);
-      margin: 0 0 24px;
-    }
-    .tagline { font-style: italic; font-size: 22px; margin: 0; }
-    .divider { width: 56px; height: 1px; background: var(--taupe); opacity: 0.4; margin: 32px auto; }
-    .lead { font-size: 18px; line-height: 1.6; color: var(--taupe); margin: 0; }
-    .diag {
-      margin-top: 64px;
-      text-align: left;
-      background: var(--cream);
-      border: 1px solid var(--beige);
-      padding: 20px 22px;
-      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
-      font-size: 13px;
-      color: var(--earth);
-    }
-    .diag h2 {
-      font-size: 11px;
-      letter-spacing: 0.24em;
-      text-transform: uppercase;
-      font-weight: 500;
-      color: var(--taupe);
-      margin: 0 0 14px;
-    }
-    .diag ul { list-style: none; margin: 0; padding: 0; }
-    .diag li { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--beige); }
-    .diag li:last-child { border-bottom: none; }
-    .diag .ua { margin-top: 14px; font-size: 11px; color: var(--taupe); word-break: break-word; }
-    .diag .version { margin-top: 8px; font-size: 11px; color: var(--taupe); }
-  </style>
+  <link rel="stylesheet" href="css/styles.css?v=2">
 </head>
 <body>
-  <main>
-    <p class="eyebrow">Fase 1 · Prueba</p>
-    <h1>Nuestro gran día</h1>
-    <p class="tagline">Juntos es nuestro lugar favorito</p>
-    <div class="divider"></div>
-    <p class="lead">Comparte con nosotros los momentos que atesoraremos para siempre.</p>
+  <main class="page">
+    <header>
+      <p class="eyebrow">Fase 2 · Cámara</p>
+      <h1>Nuestro gran día</h1>
+      <p class="tagline">Juntos es nuestro lugar favorito</p>
+      <div class="divider"></div>
+      <p class="lead">Comparte con nosotros los momentos que atesoraremos para siempre.</p>
+    </header>
+
+    <section aria-label="Cámara">
+      <div class="viewfinder" id="viewfinder" data-state="idle">
+        <video id="camera-video" autoplay muted playsinline webkit-playsinline></video>
+
+        <div class="vf-placeholder">
+          <p>Toca «Abrir cámara» para comenzar</p>
+        </div>
+
+        <div class="vf-overlay" aria-hidden="true">
+          <span class="vf-line v1"></span>
+          <span class="vf-line v2"></span>
+          <span class="vf-line h1"></span>
+          <span class="vf-line h2"></span>
+          <span class="vf-corner tl"></span>
+          <span class="vf-corner tr"></span>
+          <span class="vf-corner bl"></span>
+          <span class="vf-corner br"></span>
+          <span class="vf-center"></span>
+          <span class="vf-label top">Nuestro gran día</span>
+          <span class="vf-label bottom" id="vf-res">—</span>
+        </div>
+
+        <div class="vf-flash" id="vf-flash"></div>
+      </div>
+
+      <div class="controls">
+        <button type="button" class="btn btn-primary" id="btn-open">Abrir cámara</button>
+
+        <div class="shutter-row" id="shutter-row" hidden>
+          <button type="button" class="btn-ghost" id="btn-close">Cerrar</button>
+          <button type="button" class="shutter" id="btn-shutter" aria-label="Tomar fotografía"><span></span></button>
+          <button type="button" class="btn-ghost" id="btn-switch">Girar</button>
+        </div>
+
+        <p class="status" id="camera-status" role="status" aria-live="polite"></p>
+      </div>
+    </section>
 
     <section class="diag" aria-labelledby="diag-title">
       <h2 id="diag-title">Diagnóstico técnico</h2>
       <ul id="diag-list"></ul>
-      <p class="ua" id="diag-ua"></p>
-      <p class="version">Versión: fase-1 · v1</p>
+      <p class="small" id="diag-camera">Cámara: todavía no abierta</p>
+      <p class="small" id="diag-ua"></p>
+      <p class="small">Versión: fase-2 · v1</p>
     </section>
   </main>
 
-  <script>
-    (function () {
-      var list = document.getElementById("diag-list");
-
-      function addRow(label, ok, detail) {
-        var li = document.createElement("li");
-        var icon = document.createElement("span");
-        var text = document.createElement("span");
-        icon.textContent = ok ? "✅" : "❌";
-        text.textContent = label + (detail ? " — " + detail : "");
-        li.appendChild(icon);
-        li.appendChild(text);
-        list.appendChild(li);
-      }
-
-      var hasMediaDevices = !!navigator.mediaDevices;
-      var hasGetUserMedia = hasMediaDevices && typeof navigator.mediaDevices.getUserMedia === "function";
-      var hasIndexedDB = false;
-      try { hasIndexedDB = !!window.indexedDB; } catch (e) { hasIndexedDB = false; }
-
-      addRow("Conexión HTTPS", location.protocol === "https:", location.protocol);
-      addRow("Contexto seguro", window.isSecureContext === true, "");
-      addRow("navigator.mediaDevices disponible", hasMediaDevices, "");
-      addRow("getUserMedia disponible", hasGetUserMedia, "");
-      addRow("IndexedDB disponible", hasIndexedDB, "");
-      addRow("Conectado a Internet", navigator.onLine === true, "");
-
-      document.getElementById("diag-ua").textContent = "Navegador: " + navigator.userAgent;
-    })();
-  </script>
+  <script src="js/diagnostics.js?v=2"></script>
+  <script src="js/camera.js?v=2"></script>
 </body>
 </html>
