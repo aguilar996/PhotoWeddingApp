@@ -16,8 +16,9 @@
   var stream = null;
   var facing = "environment";
   var starting = false;
+  var capturing = false;
 
-  // Requisitos de Safari/iOS (también están en el HTML, se refuerzan aquí)
+  // Requisitos de Safari/iOS
   video.muted = true;
   video.autoplay = true;
   video.playsInline = true;
@@ -80,7 +81,7 @@
     }
   }
 
-  // getUserMedia se llama de forma síncrona dentro del toque del usuario (requisito iOS)
+  // getUserMedia se llama dentro del toque del usuario (requisito iOS)
   function requestStream(facingMode) {
     var preferred = {
       audio: false,
@@ -95,7 +96,6 @@
                               err.name === "ConstraintNotSatisfiedError" ||
                               err.name === "TypeError");
       if (!retryable) { throw err; }
-      // Fallback 1: solo facingMode. Fallback 2: cualquier cámara.
       return navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: facingMode } })
         .catch(function () {
           return navigator.mediaDevices.getUserMedia({ audio: false, video: true });
@@ -192,21 +192,54 @@
     startCamera();
   }
 
-  function shutter() {
+  function flash() {
     flashEl.classList.remove("is-active");
     void flashEl.offsetWidth; // reinicia la animación
     flashEl.classList.add("is-active");
-    setStatus("La captura se activará en la Fase 3.", false);
+  }
+
+  // Captura el fotograma completo del vídeo, SIN marco ni superposición.
+  function capture() {
+    if (capturing) { return; }
+    if (!stream || !video.videoWidth || !video.videoHeight) {
+      setStatus("La cámara todavía no está lista. Espera un momento.", true);
+      return;
+    }
+
+    capturing = true;
+    btnShutter.disabled = true;
+    flash();
+
+    var canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    var ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob(function (blob) {
+      capturing = false;
+      btnShutter.disabled = false;
+      canvas.width = 0;
+      canvas.height = 0;
+
+      if (!blob) {
+        setStatus("No se pudo guardar la foto. Inténtalo de nuevo.", true);
+        return;
+      }
+      setStatus("", false);
+      document.dispatchEvent(new CustomEvent("wedding:photo", {
+        detail: { blob: blob, source: "camera", name: "" }
+      }));
+    }, "image/jpeg", 0.92);
   }
 
   btnOpen.addEventListener("click", startCamera);
   btnClose.addEventListener("click", closeCamera);
   btnSwitch.addEventListener("click", switchCamera);
-  btnShutter.addEventListener("click", shutter);
+  btnShutter.addEventListener("click", capture);
   video.addEventListener("loadedmetadata", updateInfo);
   video.addEventListener("resize", updateInfo);
 
-  // Si el invitado sale de Safari, liberamos la cámara (iOS la congela igualmente)
   document.addEventListener("visibilitychange", function () {
     if (document.hidden && stream) {
       closeCamera();
