@@ -32,6 +32,18 @@ body {
   text-align: center;
 }
 
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ---------- Encabezado ---------- */
 .eyebrow {
   font-family: var(--sans);
@@ -171,18 +183,25 @@ h1 {
 .controls { margin-top: 26px; }
 
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--sans);
   font-size: 12px;
   letter-spacing: 0.24em;
   text-transform: uppercase;
   min-height: 52px;
-  padding: 0 34px;
+  padding: 0 30px;
   border-radius: 2px;
   cursor: pointer;
   transition: background 0.25s ease, opacity 0.25s ease;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .btn-primary { background: var(--earth); color: var(--ivory); border: 1px solid var(--earth); }
 .btn-primary:active { background: var(--ink); }
+.btn-secondary { background: transparent; color: var(--earth); border: 1px solid var(--taupe); }
+.btn-secondary:active { background: var(--cream); }
 .btn:disabled { opacity: 0.5; cursor: default; }
 
 .shutter-row {
@@ -227,8 +246,10 @@ h1 {
   transition: transform 0.15s ease;
 }
 .shutter:active span { transform: scale(0.9); }
+.shutter:disabled { opacity: 0.6; }
 
-button:focus-visible { outline: 2px solid var(--taupe); outline-offset: 3px; }
+button:focus-visible, .btn:focus-visible { outline: 2px solid var(--taupe); outline-offset: 3px; }
+input[type="file"]:focus-visible + label { outline: 2px solid var(--taupe); outline-offset: 3px; }
 
 .status {
   min-height: 22px;
@@ -239,6 +260,92 @@ button:focus-visible { outline: 2px solid var(--taupe); outline-offset: 3px; }
   color: var(--taupe);
 }
 .status.is-error { color: var(--error); }
+
+/* ---------- Galería del teléfono ---------- */
+.picker { margin-top: 34px; }
+.picker-note {
+  margin: 12px auto 0;
+  max-width: 340px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--taupe);
+}
+
+/* ---------- Bandeja de fotos ---------- */
+.tray-section { margin-top: 48px; text-align: left; }
+.tray-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--beige);
+  padding-bottom: 10px;
+  margin-bottom: 16px;
+}
+.tray-head h2 { font-weight: 400; font-size: 24px; color: var(--earth); margin: 0; }
+.tray-count {
+  font-family: var(--sans);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--taupe);
+}
+.tray-empty {
+  font-style: italic;
+  color: var(--taupe);
+  text-align: center;
+  padding: 26px 0;
+  margin: 0;
+}
+
+.tray {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.thumb {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: var(--cream);
+  overflow: hidden;
+  border-radius: 2px;
+  animation: thumb-in 0.35s ease-out;
+}
+@keyframes thumb-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb-meta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 16px 6px 5px;
+  background: linear-gradient(transparent, rgba(43, 36, 31, 0.6));
+  color: var(--ivory);
+  font-family: var(--sans);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+.thumb-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(251, 248, 242, 0.92);
+  color: var(--earth);
+  font-size: 18px;
+  line-height: 32px;
+  padding: 0;
+  cursor: pointer;
+}
 
 /* ---------- Diagnóstico (temporal) ---------- */
 .diag {
@@ -259,7 +366,15 @@ button:focus-visible { outline: 2px solid var(--taupe); outline-offset: 3px; }
   color: var(--taupe);
   margin: 0 0 14px;
 }
+.diag h3 {
+  font-size: 10.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--taupe);
+  margin: 18px 0 8px;
+}
 .diag ul { list-style: none; margin: 0; padding: 0; }
-.diag li { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--beige); }
+.diag li { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--beige); word-break: break-word; }
 .diag li:last-child { border-bottom: none; }
 .diag .small { margin: 12px 0 0; font-size: 11px; color: var(--taupe); word-break: break-word; }
