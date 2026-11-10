@@ -543,3 +543,4 @@
 
   render();
 })();
+window.PHOTOS_LOADED = true;
