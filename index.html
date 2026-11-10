@@ -6,19 +6,22 @@
   <meta name="robots" content="noindex, nofollow">
   <meta name="theme-color" content="#FBF8F2">
   <title>Nuestro gran día</title>
-  <link rel="stylesheet" href="css/styles.css?v=11">
+  <link rel="stylesheet" href="css/styles.css?v=13">
+  <link rel="stylesheet" href="css/queue.css?v=13">
 </head>
 <body>
   <main class="page">
     <ul id="diag-errors" class="status is-error" hidden style="list-style:none;padding:0;margin:0 0 24px;text-align:left;"></ul>
 
     <header>
-      <p class="eyebrow">Fase 8 · Subida continua</p>
+      <p class="eyebrow">Fase 10 · Subida automática</p>
       <h1>Nuestro gran día</h1>
       <p class="tagline">Juntos es nuestro lugar favorito</p>
       <div class="divider"></div>
       <p class="lead">Comparte con nosotros los momentos que atesoraremos para siempre.</p>
     </header>
+
+    <p class="net-status" id="net-status" role="status" aria-live="polite" hidden></p>
 
     <section aria-label="Cámara">
       <div class="viewfinder" id="viewfinder" data-state="idle">
@@ -65,6 +68,14 @@
       <p class="status" id="picker-status" role="status" aria-live="polite"></p>
     </section>
 
+    <section class="picker upload-section" aria-label="Subida">
+      <div class="progress" id="progress" role="progressbar" aria-label="Progreso de subida" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+        <div class="progress-bar" id="progress-bar"></div>
+      </div>
+      <p class="status" id="upload-status" role="status" aria-live="polite"></p>
+      <button type="button" class="btn btn-secondary" id="btn-upload" hidden>Reintentar ahora</button>
+    </section>
+
     <section class="tray-section" aria-labelledby="tray-title">
       <div class="tray-head">
         <h2 id="tray-title">Tus fotos</h2>
@@ -72,11 +83,6 @@
       </div>
       <p class="tray-empty" id="tray-empty">Aún no has añadido fotos.</p>
       <ul class="tray" id="tray"></ul>
-    </section>
-
-    <section class="picker" aria-label="Subida">
-      <button type="button" class="btn btn-primary" id="btn-upload" disabled>No hay fotos pendientes</button>
-      <p class="status" id="upload-status" role="status" aria-live="polite"></p>
     </section>
 
     <section class="diag" aria-labelledby="diag-title">
@@ -89,15 +95,15 @@
       <h3>Archivos analizados</h3>
       <ul id="diag-files"></ul>
       <p class="small" id="diag-ua"></p>
-      <p class="small">Versión web: fase-8.2 · v1</p>
+      <p class="small">Versión web: fase-10 · v1</p>
     </section>
   </main>
 
-  <script src="js/diagnostics.js?v=11"></script>
-  <script src="js/config.js?v=11"></script>
-  <script src="js/api.js?v=11"></script>
-  <script src="js/queue.js?v=11"></script>
-  <script src="js/camera.js?v=11"></script>
-  <script src="js/photos.js?v=11"></script>
+  <script src="js/diagnostics.js?v=13"></script>
+  <script src="js/config.js?v=13"></script>
+  <script src="js/api.js?v=13"></script>
+  <script src="js/queue.js?v=13"></script>
+  <script src="js/camera.js?v=13"></script>
+  <script src="js/photos.js?v=13"></script>
 </body>
 </html>
