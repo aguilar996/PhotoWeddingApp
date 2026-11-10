@@ -7,7 +7,12 @@
   var HEIF_BRANDS = ["heic", "heix", "hevc", "hevx", "heim", "heis", "mif1", "msf1"];
   var UPLOAD_TIMEOUT_MS = 120000;
   var REMOVE_DELAY_MS = 1200;
-  var PENDING = ["En espera", "Reintentar", "Error"];
+  var BASE_DELAY_MS = 2000;
+  var MAX_DELAY_MS = 60000;
+  var MAX_AUTO_ATTEMPTS = 8;
+  var PERMANENT = ["UNSUPPORTED_TYPE", "FILE_TOO_LARGE", "EMPTY_FILE", "INVALID_DATA",
+                   "INVALID_UPLOAD_ID", "MISSING_DATA", "CONFLICT", "NO_LOCAL_DATA"];
+  var ACTIVE = ["En espera", "Subiendo", "Reintentar"];
 
   var input = document.getElementById("file-input");
   var tray = document.getElementById("tray");
@@ -16,17 +21,26 @@
   var statusEl = document.getElementById("picker-status");
   var uploadBtn = document.getElementById("btn-upload");
   var uploadStatus = document.getElementById("upload-status");
+  var netStatus = document.getElementById("net-status");
+  var progress = document.getElementById("progress");
+  var progressBar = document.getElementById("progress-bar");
   var diagFiles = document.getElementById("diag-files");
   var diagUploads = document.getElementById("diag-uploads");
   var diagStorage = document.getElementById("diag-storage");
 
   var items = [];
+  var metaEls = {};
   var busy = false;
-  var uploading = false;
+  var running = false;
+  var timer = null;
+  var progTimer = null;
   var batchDone = 0;
+  var rateBps = 250000;              // velocidad estimada (bytes/s), se ajusta sola
   var persistent = true;
   var persistGranted = null;
   var ready;
+
+  /* ---------- Utilidades ---------- */
 
   function setStatus(message, isError) {
     statusEl.textContent = message || "";
@@ -145,7 +159,7 @@
     var li = document.createElement("li");
     li.textContent = text;
     listEl.insertBefore(li, listEl.firstChild);
-    while (listEl.children.length > 20) { listEl.removeChild(listEl.lastChild); }
+    while (listEl.children.length > 30) { listEl.removeChild(listEl.lastChild); }
   }
 
   function logDiag(name, declared, detected, size, result) {
@@ -171,6 +185,8 @@
     });
   }
 
+  /* ---------- Modelo en memoria ---------- */
+
   function toItem(record, blob) {
     return {
       uploadId: record.uploadId,
@@ -181,6 +197,9 @@
       status: record.status,
       attempts: record.attempts || 0,
       progress: record.progress || 0,
+      nextAttemptAt: record.nextAttemptAt || 0,
+      permanent: !!record.permanent,
+      lastError: record.lastError || "",
       source: record.source,
       url: URL.createObjectURL(blob)
     };
@@ -203,18 +222,29 @@
     }
   }
 
-  function nextPending() {
-    for (var i = 0; i < items.length; i++) {
-      if (PENDING.indexOf(items[i].status) !== -1) { return items[i]; }
-    }
-    return null;
-  }
-
-  function pendingCount() {
+  function count(statuses) {
     var n = 0;
-    items.forEach(function (it) { if (PENDING.indexOf(it.status) !== -1) { n++; } });
+    items.forEach(function (it) { if (statuses.indexOf(it.status) !== -1) { n++; } });
     return n;
   }
+
+  function setItemStatus(item, status, changes) {
+    item.status = status;
+    var update = { status: status };
+    if (changes) {
+      Object.keys(changes).forEach(function (k) {
+        item[k] = changes[k];
+        update[k] = changes[k];
+      });
+    }
+    render();
+    if (!persistent) { return Promise.resolve(); }
+    return window.PhotoQueue.update(item.uploadId, update).catch(function (err) {
+      console.error("No se pudo actualizar el estado:", err);
+    });
+  }
+
+  /* ---------- Añadir y eliminar ---------- */
 
   function saveError(err) {
     if (err && err.name === "QuotaExceededError") {
@@ -261,6 +291,8 @@
             status: "En espera",
             attempts: 0,
             progress: 0,
+            nextAttemptAt: 0,
+            permanent: false,
             lastError: "",
             source: source
           };
@@ -271,6 +303,7 @@
             logDiag(originalName, blob.type, detected, blob.size, "✅");
             render();
             updateStorage();
+            pump();
             return null;
           }, function (err) {
             console.error("Error IndexedDB:", err);
@@ -313,12 +346,41 @@
     });
   }
 
+  /* ---------- Interfaz ---------- */
+
+  function labelFor(item) {
+    var text = item.status;
+    if (item.status === "Subiendo") { text = "Subiendo " + (item.progress || 0) + " %"; }
+    return text + " · " + formatSize(item.size);
+  }
+
+  function updateProgress() {
+    var active = count(ACTIVE);
+    if (!running && active === 0) {
+      progress.hidden = true;
+      progressBar.style.width = "0%";
+      return;
+    }
+    var total = batchDone + active;
+    var current = 0;
+    items.forEach(function (it) {
+      if (it.status === "Subiendo") { current = (it.progress || 0) / 100; }
+    });
+    var pct = total ? Math.round(((batchDone + current) / total) * 100) : 0;
+    progress.hidden = false;
+    progressBar.style.width = pct + "%";
+    progress.setAttribute("aria-valuenow", String(pct));
+  }
+
   function render() {
     while (tray.firstChild) { tray.removeChild(tray.firstChild); }
+    metaEls = {};
 
     items.forEach(function (item, index) {
       var li = document.createElement("li");
       li.className = "thumb";
+      li.classList.toggle("is-uploading", item.status === "Subiendo");
+      li.classList.toggle("is-error", item.status === "Error");
 
       var img = document.createElement("img");
       img.src = item.url;
@@ -327,7 +389,8 @@
 
       var meta = document.createElement("span");
       meta.className = "thumb-meta";
-      meta.textContent = item.status + " · " + formatSize(item.size);
+      meta.textContent = labelFor(item);
+      metaEls[item.uploadId] = meta;
 
       var btn = document.createElement("button");
       btn.type = "button";
@@ -340,6 +403,18 @@
       li.appendChild(img);
       li.appendChild(meta);
       li.appendChild(btn);
+
+      if (item.status === "Error") {
+        var retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "thumb-retry";
+        retry.setAttribute("aria-label", "Reintentar foto " + (index + 1));
+        retry.title = item.lastError || "Reintentar";
+        retry.textContent = "↻";
+        retry.addEventListener("click", function () { retryItem(item.uploadId); });
+        li.appendChild(retry);
+      }
+
       tray.appendChild(li);
     });
 
@@ -347,41 +422,95 @@
     trayCount.textContent = n === 1 ? "1 foto" : n + " fotos";
     trayEmpty.hidden = n > 0;
 
-    var pending = pendingCount();
-    uploadBtn.disabled = uploading || pending === 0;
-    if (uploading) {
+    var errors = count(["Error"]);
+    var retrying = count(["Reintentar"]);
+    var waiting = count(["En espera"]);
+    if (running) {
+      uploadBtn.hidden = false;
+      uploadBtn.disabled = true;
       uploadBtn.textContent = "Subiendo…";
-    } else if (pending === 1) {
-      uploadBtn.textContent = "Subir 1 foto";
-    } else if (pending > 1) {
-      uploadBtn.textContent = "Subir " + pending + " fotos";
+    } else if (errors || retrying) {
+      uploadBtn.hidden = false;
+      uploadBtn.disabled = false;
+      uploadBtn.textContent = "Reintentar ahora";
+    } else if (waiting) {
+      uploadBtn.hidden = false;
+      uploadBtn.disabled = false;
+      uploadBtn.textContent = "Subir ahora";
     } else {
-      uploadBtn.textContent = "No hay fotos pendientes";
+      uploadBtn.hidden = true;
+    }
+
+    updateProgress();
+  }
+
+  function showNet(online) {
+    netStatus.hidden = online;
+    if (!online) {
+      netStatus.textContent = "Sin conexión. Tus fotos están guardadas en este teléfono y se subirán solas cuando vuelva la conexión.";
     }
   }
 
-  function setItemStatus(item, status, changes) {
-    item.status = status;
-    if (changes && typeof changes.attempts === "number") { item.attempts = changes.attempts; }
-    render();
-    if (!persistent) { return Promise.resolve(); }
-    var update = { status: status };
-    if (changes) {
-      Object.keys(changes).forEach(function (k) { update[k] = changes[k]; });
+  /* ---------- Progreso estimado ---------- */
+
+  function stopEstimate() {
+    if (progTimer) { clearInterval(progTimer); }
+    progTimer = null;
+  }
+
+  function startEstimate(item) {
+    stopEstimate();
+    var t0 = Date.now();
+    var expected = 3000 + (item.size * 1.37 / rateBps) * 1000;
+    progTimer = setInterval(function () {
+      var f = Math.min(0.92, (Date.now() - t0) / expected);
+      item.progress = Math.round(f * 100);
+      var m = metaEls[item.uploadId];
+      if (m) { m.textContent = labelFor(item); }
+      updateProgress();
+    }, 300);
+  }
+
+  /* ---------- Subida ---------- */
+
+  function backoff(attempt) {
+    var base = Math.min(MAX_DELAY_MS, BASE_DELAY_MS * Math.pow(2, attempt - 1));
+    var jitter = Math.floor(Math.random() * Math.min(5000, base * 0.5));
+    return base + jitter;
+  }
+
+  function handleFailure(item, attempts, code, totalMs) {
+    var permanent = PERMANENT.indexOf(code) !== -1;
+
+    if (!permanent && navigator.onLine === false) {
+      addLog(diagUploads, "⏸ " + item.filename + " · sin conexión · " + code);
+      showNet(false);
+      return setItemStatus(item, "Reintentar", {
+        attempts: Math.max(0, attempts - 1), nextAttemptAt: 0, lastError: code, progress: 0
+      });
     }
-    return window.PhotoQueue.update(item.uploadId, update).catch(function (err) {
-      console.error("No se pudo actualizar el estado:", err);
+
+    if (permanent || attempts >= MAX_AUTO_ATTEMPTS) {
+      addLog(diagUploads, "❌ " + item.filename + " · intento " + attempts + " · " + secs(totalMs) +
+             " · " + code + (permanent ? " (no se reintentará)" : " (máximo de intentos)"));
+      return setItemStatus(item, "Error", { lastError: code, permanent: permanent, progress: 0 });
+    }
+
+    var delay = backoff(attempts);
+    addLog(diagUploads, "↻ " + item.filename + " · intento " + attempts + " · " + secs(totalMs) +
+           " · " + code + " · nuevo intento en " + secs(delay));
+    return setItemStatus(item, "Reintentar", {
+      lastError: code, nextAttemptAt: Date.now() + delay, progress: 0
     });
   }
 
-  // Sube UNA foto. Devuelve una promesa con true (confirmada) o false (falló).
   function uploadOne(item) {
     var attempts = (item.attempts || 0) + 1;
     var started = Date.now();
     var prepMs = 0;
     var tRequest = 0;
 
-    return setItemStatus(item, "Subiendo", { attempts: attempts })
+    return setItemStatus(item, "Subiendo", { attempts: attempts, progress: 0 })
       .then(function () {
         return window.PhotoQueue.get(item.uploadId);
       })
@@ -393,6 +522,7 @@
       .then(function (b64) {
         prepMs = Date.now() - started;
         tRequest = Date.now();
+        startEstimate(item);
         return window.Api.post({
           action: "upload",
           uploadId: item.uploadId,
@@ -404,96 +534,136 @@
         }, UPLOAD_TIMEOUT_MS);
       })
       .then(function (r) {
+        stopEstimate();
         var totalMs = Date.now() - started;
         var requestMs = Date.now() - tRequest;
         var d = r.data || {};
         var confirmed = r.ok && d.ok === true && d.uploadId === item.uploadId && !!d.fileId;
 
         if (confirmed) {
+          if (requestMs > 500) {
+            var sample = item.size * 1.37 / (requestMs / 1000);
+            rateBps = Math.round(rateBps * 0.6 + sample * 0.4);
+          }
           var t = d.timings || {};
-          var serverMs = typeof t.serverMs === "number" ? t.serverMs : NaN;
-          var netMs = isNaN(serverMs) ? NaN : Math.max(0, requestMs - serverMs);
           addLog(diagUploads, "✅ " + item.filename + " · " + formatSize(item.size) +
+                 " · intento " + attempts +
                  " · total " + secs(totalMs) +
                  " · preparar " + secs(prepMs) +
-                 " · red ≈ " + secs(netMs) +
-                 " · servidor " + secs(serverMs) +
-                 " (json " + secs(t.parseMs) + " · base64 " + secs(t.decodeMs) +
-                 " · drive " + secs(t.driveMs) + " · hoja " + secs(t.sheetMs) + ")" +
+                 " · servidor " + secs(t.serverMs) +
+                 " (drive " + secs(t.driveMs) + ")" +
+                 (d.duplicate ? " · ya existía, sin copia nueva" : "") +
                  " · " + (d.version || ""));
-          return setItemStatus(item, "Subida", { progress: 100, fileId: d.fileId, lastError: "" })
-            .then(function () {
-              finalizeUploaded(item.uploadId);
-              return true;
-            });
+          batchDone++;
+          return setItemStatus(item, "Subida", {
+            progress: 100, fileId: d.fileId, lastError: "", nextAttemptAt: 0
+          }).then(function () {
+            finalizeUploaded(item.uploadId);
+          });
         }
 
         var code = d.error || r.error || ("HTTP " + r.status);
-        addLog(diagUploads, "❌ " + item.filename + " · " + secs(totalMs) + " · " + code);
-        setUploadStatus("No se pudo subir una foto (" + code + "). Toca el botón para intentarlo de nuevo.", true);
-        return setItemStatus(item, "Error", { lastError: code }).then(function () { return false; });
+        return handleFailure(item, attempts, code, totalMs);
       })
       .catch(function (err) {
+        stopEstimate();
         var code = (err && err.message) || "ERROR_LOCAL";
-        addLog(diagUploads, "❌ " + item.filename + " · " + code);
-        setUploadStatus("No se pudo preparar una foto (" + code + ").", true);
-        return setItemStatus(item, "Error", { lastError: code }).then(function () { return false; });
+        return handleFailure(item, attempts, code, Date.now() - started);
       });
   }
 
-  // Sube todas las pendientes, una por una. Se detiene en el primer error.
-  function uploadAll() {
-    if (uploading) { return; }
-    if (!persistent) {
-      setUploadStatus("Este navegador no permite guardar fotos; no es posible subir.", true);
-      return;
+  function finishBatch() {
+    var errors = count(["Error"]);
+    if (errors) {
+      setUploadStatus(errors === 1 ? "Una foto no se pudo subir. Toca «Reintentar ahora»." :
+                      errors + " fotos no se pudieron subir. Toca «Reintentar ahora».", true);
+    } else if (batchDone > 0) {
+      setUploadStatus(batchDone === 1 ? "Foto subida. ¡Gracias!" :
+                      batchDone + " fotos subidas. ¡Gracias!", false);
     }
-    if (!window.Api) {
-      setUploadStatus("No se pudo cargar la conexión. Recarga la página.", true);
-      return;
-    }
-    if (!nextPending()) {
-      setUploadStatus("No hay fotos pendientes.", false);
-      return;
-    }
-
-    uploading = true;
     batchDone = 0;
-    setStatus("", false);
-    render();
+  }
 
-    function finish(allOk) {
-      uploading = false;
-      if (allOk && batchDone > 0) {
-        setUploadStatus(batchDone === 1 ? "Foto subida. ¡Gracias!" :
-                        batchDone + " fotos subidas. ¡Gracias!", false);
+  // Motor único: nunca hay dos subidas a la vez desde el mismo teléfono
+  function pump() {
+    if (running || !persistent || !window.Api) { render(); return; }
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (navigator.onLine === false) {
+      showNet(false);
+      render();
+      return;
+    }
+
+    var now = Date.now();
+    var next = null;
+    var soonest = Infinity;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var due = it.status === "En espera" ||
+                (it.status === "Reintentar" && (it.nextAttemptAt || 0) <= now);
+      if (!next && due) { next = it; }
+      if (it.status === "Reintentar" && (it.nextAttemptAt || 0) > now) {
+        soonest = Math.min(soonest, it.nextAttemptAt);
+      }
+    }
+
+    if (!next) {
+      if (soonest < Infinity) {
+        timer = setTimeout(pump, soonest - now + 50);
+        setUploadStatus("Conexión inestable. Reintentaremos automáticamente en " +
+                        Math.ceil((soonest - now) / 1000) + " s.", false);
+      } else {
+        finishBatch();
       }
       render();
-      updateStorage();
+      return;
     }
 
-    function step() {
-      var item = nextPending();
-      if (!item) { finish(true); return; }
-      if (navigator.onLine === false) {
-        setUploadStatus("Sin conexión a Internet. Tus fotos siguen guardadas en el teléfono.", true);
-        finish(false);
-        return;
-      }
-      var total = batchDone + pendingCount();
-      setUploadStatus("Subiendo foto " + (batchDone + 1) + " de " + total + "…", false);
-      uploadOne(item).then(function (ok) {
-        if (ok) {
-          batchDone++;
-          step();
-        } else {
-          finish(false);
-        }
+    running = true;
+    var total = batchDone + count(ACTIVE);
+    setUploadStatus("Subiendo foto " + (batchDone + 1) + " de " + total + "…", false);
+    uploadOne(next)
+      .catch(function (err) { console.error("Fallo inesperado:", err); })
+      .then(function () {
+        running = false;
+        updateStorage();
+        pump();
       });
-    }
-
-    step();
   }
+
+  // Devuelve a la cola lo que falló por red (no los errores permanentes)
+  function revive(resetSchedule) {
+    var changes = [];
+    items.forEach(function (it) {
+      if (it.status === "Error" && !it.permanent) {
+        changes.push(setItemStatus(it, "En espera", { attempts: 0, lastError: "" }));
+      } else if (resetSchedule && it.status === "Reintentar") {
+        changes.push(setItemStatus(it, "Reintentar", { nextAttemptAt: 0 }));
+      }
+    });
+    Promise.all(changes).then(pump);
+  }
+
+  function retryItem(uploadId) {
+    var it = findItem(uploadId);
+    if (!it || it.status !== "Error") { return; }
+    setItemStatus(it, "En espera", { attempts: 0, permanent: false, lastError: "" }).then(pump);
+  }
+
+  function retryNow() {
+    var changes = [];
+    items.forEach(function (it) {
+      if (it.status === "Error") {
+        changes.push(setItemStatus(it, "En espera", { attempts: 0, permanent: false, lastError: "" }));
+      } else if (it.status === "Reintentar") {
+        changes.push(setItemStatus(it, "Reintentar", { nextAttemptAt: 0 }));
+      }
+    });
+    setUploadStatus("", false);
+    Promise.all(changes).then(pump);
+  }
+
+  /* ---------- Arranque ---------- */
 
   function loadSaved() {
     if (!window.PhotoQueue) { return Promise.reject(new Error("PhotoQueue no cargado")); }
@@ -508,10 +678,11 @@
           return;
         }
         if (!r.data) { return; }
-        // Si la página se cerró a mitad de una subida, vuelve a quedar pendiente
+        // Se cerró a mitad de una subida: vuelve a la cola (el servidor evita duplicados)
         if (r.status === "Subiendo") {
           r.status = "Reintentar";
-          fixes.push(window.PhotoQueue.update(r.uploadId, { status: "Reintentar" }));
+          r.nextAttemptAt = 0;
+          fixes.push(window.PhotoQueue.update(r.uploadId, { status: "Reintentar", nextAttemptAt: 0 }));
         }
         var savedBlob = new Blob([r.data], { type: r.mimeType });
         items.push(toItem(r, savedBlob));
@@ -537,6 +708,8 @@
     setStatus("Este navegador no permite guardar fotos en el teléfono. No cierres la página hasta subirlas.", true);
   }).then(function () {
     updateStorage();
+    showNet(navigator.onLine !== false);
+    pump();
   });
 
   function handleFiles(files) {
@@ -571,7 +744,21 @@
     handleFiles(files);
   });
 
-  uploadBtn.addEventListener("click", uploadAll);
+  uploadBtn.addEventListener("click", retryNow);
+
+  window.addEventListener("online", function () {
+    showNet(true);
+    revive(true);
+  });
+
+  window.addEventListener("offline", function () {
+    showNet(false);
+    render();
+  });
+
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) { revive(false); }
+  });
 
   document.addEventListener("wedding:photo", function (e) {
     var d = e.detail || {};
