@@ -361,4 +361,185 @@
     if (changes) {
       Object.keys(changes).forEach(function (k) { update[k] = changes[k]; });
     }
-    return window.
+    return window.PhotoQueue.update(item.uploadId, update).catch(function (err) {
+      console.error("No se pudo actualizar el estado:", err);
+    });
+  }
+
+  function uploadNext() {
+    if (uploading) { return; }
+    if (!persistent) {
+      setUploadStatus("Este navegador no permite guardar fotos; no es posible subir.", true);
+      return;
+    }
+    if (!window.Api) {
+      setUploadStatus("No se pudo cargar la conexión. Recarga la página.", true);
+      return;
+    }
+    var item = nextPending();
+    if (!item) {
+      setUploadStatus("No hay fotos pendientes.", false);
+      return;
+    }
+    if (navigator.onLine === false) {
+      setUploadStatus("Sin conexión a Internet. Tus fotos siguen guardadas en el teléfono.", true);
+      return;
+    }
+
+    uploading = true;
+    setStatus("", false);
+    var attempts = (item.attempts || 0) + 1;
+    var started = Date.now();
+    var prepMs = 0;
+    var tRequest = 0;
+    setUploadStatus("Subiendo foto…", false);
+
+    setItemStatus(item, "Subiendo", { attempts: attempts })
+      .then(function () {
+        return window.PhotoQueue.get(item.uploadId);
+      })
+      .then(function (rec) {
+        if (!rec || !rec.data) { throw new Error("NO_LOCAL_DATA"); }
+        return readBase64(new Blob([rec.data], { type: rec.mimeType }));
+      })
+      .then(function (b64) {
+        prepMs = Date.now() - started;
+        tRequest = Date.now();
+        return window.Api.post({
+          action: "upload",
+          uploadId: item.uploadId,
+          filename: item.filename,
+          mimeType: item.mimeType,
+          size: item.size,
+          deviceId: deviceId(),
+          data: b64
+        }, UPLOAD_TIMEOUT_MS);
+      })
+      .then(function (r) {
+        var totalMs = Date.now() - started;
+        var requestMs = Date.now() - tRequest;
+        var d = r.data || {};
+        var confirmed = r.ok && d.ok === true && d.uploadId === item.uploadId && !!d.fileId;
+
+        if (confirmed) {
+          var t = d.timings || {};
+          var serverMs = typeof t.serverMs === "number" ? t.serverMs : NaN;
+          var netMs = isNaN(serverMs) ? NaN : Math.max(0, requestMs - serverMs);
+          addLog(diagUploads, "✅ " + item.filename + " · " + formatSize(item.size) +
+                 " · total " + secs(totalMs) +
+                 " · preparar " + secs(prepMs) +
+                 " · red ≈ " + secs(netMs) +
+                 " · servidor " + secs(serverMs) +
+                 " (json " + secs(t.parseMs) + " · base64 " + secs(t.decodeMs) +
+                 " · drive " + secs(t.driveMs) + " · hoja " + secs(t.sheetMs) + ")" +
+                 " · " + (d.version || ""));
+          setUploadStatus("Foto subida. ¡Gracias!", false);
+          return setItemStatus(item, "Subida", { progress: 100, fileId: d.fileId, lastError: "" })
+            .then(function () { return finalizeUploaded(item.uploadId); });
+        }
+
+        var code = d.error || r.error || ("HTTP " + r.status);
+        addLog(diagUploads, "❌ " + item.filename + " · " + secs(totalMs) + " · " + code);
+        setUploadStatus("No se pudo subir la foto (" + code + "). Toca el botón para intentarlo de nuevo.", true);
+        return setItemStatus(item, "Error", { lastError: code });
+      })
+      .catch(function (err) {
+        var code = (err && err.message) || "ERROR_LOCAL";
+        addLog(diagUploads, "❌ " + item.filename + " · " + code);
+        setUploadStatus("No se pudo preparar la foto (" + code + ").", true);
+        return setItemStatus(item, "Error", { lastError: code });
+      })
+      .then(function () {
+        uploading = false;
+        render();
+        updateStorage();
+      });
+  }
+
+  function loadSaved() {
+    if (!window.PhotoQueue) { return Promise.reject(new Error("PhotoQueue no cargado")); }
+    return window.PhotoQueue.getAll().then(function (records) {
+      var recovered = 0;
+      var fixes = [];
+      records.forEach(function (r) {
+        if (!r) { return; }
+        // Ya confirmada por el servidor: solo falta limpiarla del teléfono
+        if (r.status === "Subida") {
+          fixes.push(window.PhotoQueue.remove(r.uploadId).catch(function () { return null; }));
+          return;
+        }
+        if (!r.data) { return; }
+        // Si la página se cerró a mitad de una subida, vuelve a quedar pendiente
+        if (r.status === "Subiendo") {
+          r.status = "Reintentar";
+          fixes.push(window.PhotoQueue.update(r.uploadId, { status: "Reintentar" }));
+        }
+        var blob = new Blob([r.data], { type: r.mimeType });
+        items.push(toItem(r, blob));
+        recovered++;
+      });
+      render();
+      if (recovered) {
+        setStatus(recovered === 1 ? "1 foto pendiente recuperada de tu teléfono." :
+                  recovered + " fotos pendientes recuperadas de tu teléfono.", false);
+      }
+      window.PhotoQueue.persist().then(function (granted) {
+        persistGranted = !!granted;
+        updateStorage();
+      });
+      return Promise.all(fixes);
+    });
+  }
+
+  ready = loadSaved().catch(function (err) {
+    console.error("IndexedDB no disponible:", err);
+    persistent = false;
+    render();
+    setStatus("Este navegador no permite guardar fotos en el teléfono. No cierres la página hasta subirlas.", true);
+  }).then(function () {
+    updateStorage();
+  });
+
+  function handleFiles(files) {
+    if (busy || !files.length) { return; }
+    busy = true;
+    setStatus("Preparando " + files.length + (files.length === 1 ? " foto…" : " fotos…"), false);
+
+    var added = 0;
+    var errors = [];
+
+    files.reduce(function (chain, file) {
+      return chain.then(function () {
+        return addBlob(file, "gallery", file.name).then(function (reason) {
+          if (reason) { errors.push(reason); } else { added++; }
+        });
+      });
+    }, Promise.resolve()).then(function () {
+      busy = false;
+      if (errors.length) {
+        var msg = added + (added === 1 ? " foto añadida. " : " fotos añadidas. ") +
+                  errors.length + (errors.length === 1 ? " rechazada: " : " rechazadas: ") + errors[0];
+        setStatus(msg, true);
+      } else {
+        setStatus(added + (added === 1 ? " foto añadida." : " fotos añadidas."), false);
+      }
+    });
+  }
+
+  input.addEventListener("change", function () {
+    var files = Array.prototype.slice.call(input.files || []);
+    input.value = "";
+    handleFiles(files);
+  });
+
+  uploadBtn.addEventListener("click", uploadNext);
+
+  document.addEventListener("wedding:photo", function (e) {
+    var d = e.detail || {};
+    addBlob(d.blob, d.source || "camera", d.name || "").then(function (reason) {
+      if (reason) { setStatus(reason, true); } else { setStatus("Foto guardada.", false); }
+    });
+  });
+
+  render();
+})();
