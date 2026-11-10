@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#FBF8F2">
+  <meta name="referrer" content="no-referrer">
+  <title>Galería · Nuestro gran día</title>
+  <link rel="stylesheet" href="css/styles.css?v=14">
+  <link rel="stylesheet" href="css/gallery.css?v=14">
+</head>
+<body>
+  <main class="page gallery-page">
+    <ul id="diag-errors" class="status is-error" hidden style="list-style:none;padding:0;margin:0 0 24px;text-align:left;"></ul>
+
+    <a class="g-back" href="index.html">← Volver a la cámara</a>
+
+    <header>
+      <p class="eyebrow">Galería</p>
+      <h1>Nuestro gran día</h1>
+      <p class="tagline">Momentos compartidos</p>
+      <div class="divider"></div>
+      <p class="lead">Toca una foto para verla en grande o descargarla.</p>
+    </header>
+
+    <div class="g-toolbar">
+      <span class="g-count" id="g-count">—</span>
+      <button type="button" class="btn btn-secondary g-refresh" id="g-refresh">Actualizar</button>
+    </div>
+
+    <p class="status" id="g-status" role="status" aria-live="polite"></p>
+    <p class="g-empty" id="g-empty" hidden>Todavía no hay fotos. ¡Sé el primero en compartir una!</p>
+
+    <div class="g-grid" id="g-grid"></div>
+
+    <section class="diag" aria-label="Diagnóstico">
+      <p class="small" id="g-diag">—</p>
+      <p class="small">Versión web: fase-11 · v1</p>
+    </section>
+  </main>
+
+  <script src="js/diagnostics.js?v=14"></script>
+  <script src="js/config.js?v=14"></script>
+  <script src="js/api.js?v=14"></script>
+  <script src="js/gallery.js?v=14"></script>
+</body>
+</html>
