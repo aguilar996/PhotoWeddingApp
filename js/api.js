@@ -3,24 +3,40 @@
 
   var config = window.APP_CONFIG || {};
 
-  // Envía una petición y devuelve siempre un objeto; nunca lanza error
+  // Envía una petición y devuelve siempre un objeto; nunca lanza error.
+  // options.signal permite cancelarla desde fuera (botón «Cancelar subida»).
   function call(method, options) {
     options = options || {};
     var started = Date.now();
     var timeoutMs = options.timeoutMs || config.REQUEST_TIMEOUT_MS || 45000;
     var controller = typeof AbortController === "function" ? new AbortController() : null;
     var timedOut = false;
+    var cancelled = false;
+
     var timer = setTimeout(function () {
       timedOut = true;
       if (controller) { controller.abort(); }
     }, timeoutMs);
+
+    var external = options.signal;
+    function onExternalAbort() {
+      cancelled = true;
+      if (controller) { controller.abort(); }
+    }
+    if (external) {
+      if (external.aborted) {
+        onExternalAbort();
+      } else {
+        external.addEventListener("abort", onExternalAbort);
+      }
+    }
 
     var url = config.API_URL;
     var init = {
       method: method,
       redirect: "follow",     // Apps Script responde con una redirección
       cache: "no-store",
-      credentials: "omit"     // sin cookies de Google: evita conflictos de cuentas
+      credentials: "omit"     // sin cookies de Google
     };
     if (controller) { init.signal = controller.signal; }
 
@@ -50,16 +66,18 @@
         };
       });
     }).catch(function (err) {
-      return {
-        ok: false,
-        status: 0,
-        data: null,
-        error: timedOut ? "TIMEOUT" : ((err && err.name ? err.name : "Error") +
-                                       (err && err.message ? ": " + err.message : "")),
-        ms: Date.now() - started
-      };
+      var code;
+      if (cancelled) {
+        code = "CANCELLED";
+      } else if (timedOut) {
+        code = "TIMEOUT";
+      } else {
+        code = (err && err.name ? err.name : "Error") + (err && err.message ? ": " + err.message : "");
+      }
+      return { ok: false, status: 0, data: null, error: code, ms: Date.now() - started };
     }).then(function (result) {
       clearTimeout(timer);
+      if (external) { external.removeEventListener("abort", onExternalAbort); }
       return result;
     });
   }
@@ -68,8 +86,8 @@
     get: function (params, timeoutMs) {
       return call("GET", { params: params, timeoutMs: timeoutMs });
     },
-    post: function (body, timeoutMs) {
-      return call("POST", { body: body, timeoutMs: timeoutMs });
+    post: function (body, timeoutMs, signal) {
+      return call("POST", { body: body, timeoutMs: timeoutMs, signal: signal });
     },
     raw: call
   };
