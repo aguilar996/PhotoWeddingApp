@@ -5,17 +5,23 @@
   var MAX_ITEMS = 100;
   var ALLOWED = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
   var HEIF_BRANDS = ["heic", "heix", "hevc", "hevx", "heim", "heis", "mif1", "msf1"];
+  var UPLOAD_TIMEOUT_MS = 120000;
+  var PENDING = ["En espera", "Reintentar", "Error"];
 
   var input = document.getElementById("file-input");
   var tray = document.getElementById("tray");
   var trayEmpty = document.getElementById("tray-empty");
   var trayCount = document.getElementById("tray-count");
   var statusEl = document.getElementById("picker-status");
+  var uploadBtn = document.getElementById("btn-upload");
+  var uploadStatus = document.getElementById("upload-status");
   var diagFiles = document.getElementById("diag-files");
+  var diagUploads = document.getElementById("diag-uploads");
   var diagStorage = document.getElementById("diag-storage");
 
   var items = [];
   var busy = false;
+  var uploading = false;
   var persistent = true;
   var persistGranted = null;
   var ready;
@@ -23,6 +29,11 @@
   function setStatus(message, isError) {
     statusEl.textContent = message || "";
     statusEl.classList.toggle("is-error", !!isError);
+  }
+
+  function setUploadStatus(message, isError) {
+    uploadStatus.textContent = message || "";
+    uploadStatus.classList.toggle("is-error", !!isError);
   }
 
   function uuid() {
@@ -40,6 +51,19 @@
            hex.slice(16, 20) + "-" + hex.slice(20);
   }
 
+  function deviceId() {
+    try {
+      var id = localStorage.getItem("ngd-device-id");
+      if (!id) {
+        id = uuid();
+        localStorage.setItem("ngd-device-id", id);
+      }
+      return id;
+    } catch (e) {
+      return "sin-id";
+    }
+  }
+
   function formatSize(bytes) {
     if (bytes >= 1024 * 1024 * 1024) { return (bytes / (1024 * 1024 * 1024)).toFixed(1) + " GB"; }
     if (bytes >= 1024 * 1024) { return (bytes / (1024 * 1024)).toFixed(1) + " MB"; }
@@ -53,13 +77,25 @@
            pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
   }
 
-  // FileReader: compatible con versiones antiguas de Safari
   function readBuffer(blob) {
     return new Promise(function (resolve, reject) {
       var reader = new FileReader();
       reader.onload = function () { resolve(reader.result); };
       reader.onerror = function () { reject(reader.error); };
       reader.readAsArrayBuffer(blob);
+    });
+  }
+
+  function readBase64(blob) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        var s = String(reader.result || "");
+        var comma = s.indexOf(",");
+        resolve(comma >= 0 ? s.slice(comma + 1) : s);
+      };
+      reader.onerror = function () { reject(reader.error); };
+      reader.readAsDataURL(blob);
     });
   }
 
@@ -93,15 +129,19 @@
     return base + "." + ext;
   }
 
-  function logDiag(name, declared, detected, size, result) {
-    if (!diagFiles) { return; }
+  function addLog(listEl, text) {
+    if (!listEl) { return; }
     var li = document.createElement("li");
-    li.textContent = result + " " + (name || "(cámara)") +
+    li.textContent = text;
+    listEl.insertBefore(li, listEl.firstChild);
+    while (listEl.children.length > 20) { listEl.removeChild(listEl.lastChild); }
+  }
+
+  function logDiag(name, declared, detected, size, result) {
+    addLog(diagFiles, result + " " + (name || "(cámara)") +
       " · declarado: " + (declared || "vacío") +
       " · real: " + (detected || "desconocido") +
-      " · " + formatSize(size);
-    diagFiles.insertBefore(li, diagFiles.firstChild);
-    while (diagFiles.children.length > 20) { diagFiles.removeChild(diagFiles.lastChild); }
+      " · " + formatSize(size));
   }
 
   function updateStorage() {
@@ -128,11 +168,31 @@
       size: record.size,
       createdAt: record.createdAt,
       status: record.status,
-      attempts: record.attempts,
-      progress: record.progress,
+      attempts: record.attempts || 0,
+      progress: record.progress || 0,
       source: record.source,
       url: URL.createObjectURL(blob)
     };
+  }
+
+  function findItem(uploadId) {
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].uploadId === uploadId) { return items[i]; }
+    }
+    return null;
+  }
+
+  function nextPending() {
+    for (var i = 0; i < items.length; i++) {
+      if (PENDING.indexOf(items[i].status) !== -1) { return items[i]; }
+    }
+    return null;
+  }
+
+  function pendingCount() {
+    var n = 0;
+    items.forEach(function (it) { if (PENDING.indexOf(it.status) !== -1) { n++; } });
+    return n;
   }
 
   function saveError(err) {
@@ -142,7 +202,6 @@
     return "No se pudo guardar la foto en el teléfono. Inténtalo de nuevo.";
   }
 
-  // Devuelve null si se añadió, o un texto con el motivo del rechazo
   function addBlob(blob, source, originalName) {
     return ready.then(function () {
       if (items.length >= MAX_ITEMS) {
@@ -206,6 +265,8 @@
   }
 
   function removeItem(uploadId) {
+    var item = findItem(uploadId);
+    if (item && item.status === "Subiendo") { return; }
     var del = persistent ? window.PhotoQueue.remove(uploadId) : Promise.resolve();
     del.then(function () {
       for (var i = 0; i < items.length; i++) {
@@ -215,6 +276,7 @@
           break;
         }
       }
+      setStatus("", false);
       render();
       updateStorage();
     }, function () {
@@ -243,6 +305,7 @@
       btn.className = "thumb-remove";
       btn.setAttribute("aria-label", "Eliminar foto " + (index + 1));
       btn.textContent = "×";
+      btn.disabled = item.status === "Subiendo";
       btn.addEventListener("click", function () { removeItem(item.uploadId); });
 
       li.appendChild(img);
@@ -254,7 +317,138 @@
     var n = items.length;
     trayCount.textContent = n === 1 ? "1 foto" : n + " fotos";
     trayEmpty.hidden = n > 0;
+
+    var pending = pendingCount();
+    uploadBtn.disabled = uploading || pending === 0;
+    uploadBtn.textContent = uploading ? "Subiendo…" :
+      (pending ? "Subir siguiente foto (" + pending + " pendientes)" : "No hay fotos pendientes");
   }
+
+  function setItemStatus(item, status, changes) {
+    item.status = status;
+    if (changes && typeof changes.attempts === "number") { item.attempts = changes.attempts; }
+    render();
+    if (!persistent) { return Promise.resolve(); }
+    var update = { status: status };
+    if (changes) {
+      Object.keys(changes).forEach(function (k) { update[k] = changes[k]; });
+    }
+    return window.PhotoQueue.update(item.uploadId, update).catch(function (err) {
+      console.error("No se pudo actualizar el estado:", err);
+    });
+  }
+
+  function uploadNext() {
+    if (uploading) { return; }
+    if (!persistent) {
+      setUploadStatus("Este navegador no permite guardar fotos; no es posible subir.", true);
+      return;
+    }
+    if (!window.Api) {
+      setUploadStatus("No se pudo cargar la conexión. Recarga la página.", true);
+      return;
+    }
+    var item = nextPending();
+    if (!item) {
+      setUploadStatus("No hay fotos pendientes.", false);
+      return;
+    }
+    if (navigator.onLine === false) {
+      setUploadStatus("Sin conexión a Internet. Tus fotos siguen guardadas en el teléfono.", true);
+      return;
+    }
+
+    uploading = true;
+    var attempts = (item.attempts || 0) + 1;
+    var started = Date.now();
+    setUploadStatus("Subiendo foto…", false);
+
+    setItemStatus(item, "Subiendo", { attempts: attempts })
+      .then(function () {
+        return window.PhotoQueue.get(item.uploadId);
+      })
+      .then(function (rec) {
+        if (!rec || !rec.data) { throw new Error("NO_LOCAL_DATA"); }
+        return readBase64(new Blob([rec.data], { type: rec.mimeType }));
+      })
+      .then(function (b64) {
+        return window.Api.post({
+          action: "upload",
+          uploadId: item.uploadId,
+          filename: item.filename,
+          mimeType: item.mimeType,
+          size: item.size,
+          deviceId: deviceId(),
+          data: b64
+        }, UPLOAD_TIMEOUT_MS);
+      })
+      .then(function (r) {
+        var secs = ((Date.now() - started) / 1000).toFixed(1);
+        var d = r.data || {};
+        var confirmed = r.ok && d.ok === true && d.uploadId === item.uploadId && !!d.fileId;
+
+        if (confirmed) {
+          addLog(diagUploads, "✅ " + item.filename + " · " + formatSize(item.size) + " · " +
+                 secs + " s · fileId " + String(d.fileId).slice(0, 6) + "… · " + (d.version || ""));
+          setUploadStatus("Foto subida. ¡Gracias!", false);
+          return setItemStatus(item, "Subida", { progress: 100, fileId: d.fileId, lastError: "" });
+        }
+
+        var code = d.error || r.error || ("HTTP " + r.status);
+        addLog(diagUploads, "❌ " + item.filename + " · " + secs + " s · " + code);
+        setUploadStatus("No se pudo subir la foto (" + code + "). Toca el botón para intentarlo de nuevo.", true);
+        return setItemStatus(item, "Error", { lastError: code });
+      })
+      .catch(function (err) {
+        var code = (err && err.message) || "ERROR_LOCAL";
+        addLog(diagUploads, "❌ " + item.filename + " · " + code);
+        setUploadStatus("No se pudo preparar la foto (" + code + ").", true);
+        return setItemStatus(item, "Error", { lastError: code });
+      })
+      .then(function () {
+        uploading = false;
+        render();
+        updateStorage();
+      });
+  }
+
+  function loadSaved() {
+    if (!window.PhotoQueue) { return Promise.reject(new Error("PhotoQueue no cargado")); }
+    return window.PhotoQueue.getAll().then(function (records) {
+      var recovered = 0;
+      var fixes = [];
+      records.forEach(function (r) {
+        if (!r || !r.data) { return; }
+        // Si la página se cerró a mitad de una subida, vuelve a quedar pendiente
+        if (r.status === "Subiendo") {
+          r.status = "Reintentar";
+          fixes.push(window.PhotoQueue.update(r.uploadId, { status: "Reintentar" }));
+        }
+        var blob = new Blob([r.data], { type: r.mimeType });
+        items.push(toItem(r, blob));
+        recovered++;
+      });
+      render();
+      if (recovered) {
+        setStatus(recovered === 1 ? "1 foto recuperada de tu teléfono." :
+                  recovered + " fotos recuperadas de tu teléfono.", false);
+      }
+      window.PhotoQueue.persist().then(function (granted) {
+        persistGranted = !!granted;
+        updateStorage();
+      });
+      return Promise.all(fixes);
+    });
+  }
+
+  ready = loadSaved().catch(function (err) {
+    console.error("IndexedDB no disponible:", err);
+    persistent = false;
+    render();
+    setStatus("Este navegador no permite guardar fotos en el teléfono. No cierres la página hasta subirlas.", true);
+  }).then(function () {
+    updateStorage();
+  });
 
   function handleFiles(files) {
     if (busy || !files.length) { return; }
@@ -282,43 +476,13 @@
     });
   }
 
-  // Recupera la cola guardada al abrir la página
-  function loadSaved() {
-    if (!window.PhotoQueue) { return Promise.reject(new Error("PhotoQueue no cargado")); }
-    return window.PhotoQueue.getAll().then(function (records) {
-      var recovered = 0;
-      records.forEach(function (r) {
-        if (!r || !r.data) { return; }
-        var blob = new Blob([r.data], { type: r.mimeType });
-        items.push(toItem(r, blob));
-        recovered++;
-      });
-      render();
-      if (recovered) {
-        setStatus(recovered === 1 ? "1 foto recuperada de tu teléfono." :
-                  recovered + " fotos recuperadas de tu teléfono.", false);
-      }
-      window.PhotoQueue.persist().then(function (granted) {
-        persistGranted = !!granted;
-        updateStorage();
-      });
-    });
-  }
-
-  ready = loadSaved().catch(function (err) {
-    console.error("IndexedDB no disponible:", err);
-    persistent = false;
-    render();
-    setStatus("Este navegador no permite guardar fotos en el teléfono. No cierres la página hasta subirlas.", true);
-  }).then(function () {
-    updateStorage();
-  });
-
   input.addEventListener("change", function () {
     var files = Array.prototype.slice.call(input.files || []);
     input.value = "";
     handleFiles(files);
   });
+
+  uploadBtn.addEventListener("click", uploadNext);
 
   document.addEventListener("wedding:photo", function (e) {
     var d = e.detail || {};
