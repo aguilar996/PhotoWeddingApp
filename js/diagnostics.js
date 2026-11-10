@@ -1,6 +1,20 @@
 (function () {
   "use strict";
 
+  // Modo diagnóstico: ?debug=1 lo activa (se recuerda en la pestaña), ?debug=0 lo desactiva
+  var DEBUG_KEY = "ngd-debug";
+  var debug = false;
+  try {
+    var params = new URLSearchParams(location.search);
+    if (params.get("debug") === "1") { sessionStorage.setItem(DEBUG_KEY, "1"); }
+    if (params.get("debug") === "0") { sessionStorage.removeItem(DEBUG_KEY); }
+    debug = sessionStorage.getItem(DEBUG_KEY) === "1";
+  } catch (e) {
+    debug = false;
+  }
+  if (debug) { document.documentElement.classList.add("is-debug"); }
+  window.APP_DEBUG = debug;
+
   var errorsBox = document.getElementById("diag-errors");
 
   function showError(text) {
@@ -11,7 +25,6 @@
     errorsBox.appendChild(li);
   }
 
-  // Captura errores de los scripts que se cargan después de este
   window.addEventListener("error", function (e) {
     var file = e && e.filename ? String(e.filename).split("/").pop() : "?";
     var line = e && e.lineno ? e.lineno : "?";
@@ -54,12 +67,13 @@
     if (ua) { ua.textContent = "Navegador: " + navigator.userAgent; }
   }
 
-  // Comprueba que cada archivo JS se cargó
   function checkModules() {
     addRow("config.js cargado", !!window.APP_CONFIG, "");
     addRow("api.js cargado", !!window.Api, "");
-    addRow("queue.js cargado", !!window.PhotoQueue, "");
-    addRow("photos.js cargado", window.PHOTOS_LOADED === true, "");
+    if (document.getElementById("tray")) {
+      addRow("queue.js cargado", !!window.PhotoQueue, "");
+      addRow("photos.js cargado", window.PHOTOS_LOADED === true, "");
+    }
   }
 
   runChecks();
