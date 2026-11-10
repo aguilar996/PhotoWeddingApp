@@ -52,10 +52,15 @@
           return;
         }
         var result;
-        work(tx.objectStore(STORE), function (value) { result = value; });
         tx.oncomplete = function () { resolve(result); };
         tx.onerror = function () { reject(tx.error); };
         tx.onabort = function () { reject(tx.error || new Error("Transacción cancelada")); };
+        try {
+          work(tx.objectStore(STORE), function (value) { result = value; });
+        } catch (e) {
+          try { tx.abort(); } catch (ignore) { /* ya cerrada */ }
+          reject(e);
+        }
       });
     });
   }
@@ -73,7 +78,9 @@
 
   window.PhotoQueue = {
     put: function (record) {
-      return runSafe("readwrite", function (store) { store.put(record); });
+      return runSafe("readwrite", function (store) {
+        store.put(record);
+      });
     },
 
     get: function (uploadId) {
@@ -105,7 +112,16 @@
     },
 
     remove: function (uploadId) {
-      return runSafe("readwrite", function (store) { store["delete"](uploadId); });
+      return runSafe("readwrite", function (store) {
+        storeuploadId;
+      });
+    },
+
+    count: function () {
+      return runSafe("readonly", function (store, set) {
+        var r = store.count();
+        r.onsuccess = function () { set(r.result || 0); };
+      });
     },
 
     estimate: function () {
