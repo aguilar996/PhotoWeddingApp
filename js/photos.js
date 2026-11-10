@@ -23,6 +23,7 @@
   var items = [];
   var busy = false;
   var uploading = false;
+  var batchDone = 0;
   var persistent = true;
   var persistGranted = null;
   var ready;
@@ -286,7 +287,7 @@
 
   function removeItem(uploadId) {
     var item = findItem(uploadId);
-    if (item && item.status === "Subiendo") { return; }
+    if (item && (item.status === "Subiendo" || item.status === "Subida")) { return; }
     var del = persistent ? window.PhotoQueue.remove(uploadId) : Promise.resolve();
     del.then(function () {
       dropFromMemory(uploadId);
@@ -348,8 +349,15 @@
 
     var pending = pendingCount();
     uploadBtn.disabled = uploading || pending === 0;
-    uploadBtn.textContent = uploading ? "Subiendo…" :
-      (pending ? "Subir siguiente foto (" + pending + " pendientes)" : "No hay fotos pendientes");
+    if (uploading) {
+      uploadBtn.textContent = "Subiendo…";
+    } else if (pending === 1) {
+      uploadBtn.textContent = "Subir 1 foto";
+    } else if (pending > 1) {
+      uploadBtn.textContent = "Subir " + pending + " fotos";
+    } else {
+      uploadBtn.textContent = "No hay fotos pendientes";
+    }
   }
 
   function setItemStatus(item, status, changes) {
@@ -366,41 +374,21 @@
     });
   }
 
-  function uploadNext() {
-    if (uploading) { return; }
-    if (!persistent) {
-      setUploadStatus("Este navegador no permite guardar fotos; no es posible subir.", true);
-      return;
-    }
-    if (!window.Api) {
-      setUploadStatus("No se pudo cargar la conexión. Recarga la página.", true);
-      return;
-    }
-    var item = nextPending();
-    if (!item) {
-      setUploadStatus("No hay fotos pendientes.", false);
-      return;
-    }
-    if (navigator.onLine === false) {
-      setUploadStatus("Sin conexión a Internet. Tus fotos siguen guardadas en el teléfono.", true);
-      return;
-    }
-
-    uploading = true;
-    setStatus("", false);
+  // Sube UNA foto. Devuelve una promesa con true (confirmada) o false (falló).
+  function uploadOne(item) {
     var attempts = (item.attempts || 0) + 1;
     var started = Date.now();
     var prepMs = 0;
     var tRequest = 0;
-    setUploadStatus("Subiendo foto…", false);
 
-    setItemStatus(item, "Subiendo", { attempts: attempts })
+    return setItemStatus(item, "Subiendo", { attempts: attempts })
       .then(function () {
         return window.PhotoQueue.get(item.uploadId);
       })
       .then(function (rec) {
         if (!rec || !rec.data) { throw new Error("NO_LOCAL_DATA"); }
-        return readBase64(new Blob([rec.data], { type: rec.mimeType }));
+        var localBlob = new Blob([rec.data], { type: rec.mimeType });
+        return readBase64(localBlob);
       })
       .then(function (b64) {
         prepMs = Date.now() - started;
@@ -433,27 +421,78 @@
                  " (json " + secs(t.parseMs) + " · base64 " + secs(t.decodeMs) +
                  " · drive " + secs(t.driveMs) + " · hoja " + secs(t.sheetMs) + ")" +
                  " · " + (d.version || ""));
-          setUploadStatus("Foto subida. ¡Gracias!", false);
           return setItemStatus(item, "Subida", { progress: 100, fileId: d.fileId, lastError: "" })
-            .then(function () { return finalizeUploaded(item.uploadId); });
+            .then(function () {
+              finalizeUploaded(item.uploadId);
+              return true;
+            });
         }
 
         var code = d.error || r.error || ("HTTP " + r.status);
         addLog(diagUploads, "❌ " + item.filename + " · " + secs(totalMs) + " · " + code);
-        setUploadStatus("No se pudo subir la foto (" + code + "). Toca el botón para intentarlo de nuevo.", true);
-        return setItemStatus(item, "Error", { lastError: code });
+        setUploadStatus("No se pudo subir una foto (" + code + "). Toca el botón para intentarlo de nuevo.", true);
+        return setItemStatus(item, "Error", { lastError: code }).then(function () { return false; });
       })
       .catch(function (err) {
         var code = (err && err.message) || "ERROR_LOCAL";
         addLog(diagUploads, "❌ " + item.filename + " · " + code);
-        setUploadStatus("No se pudo preparar la foto (" + code + ").", true);
-        return setItemStatus(item, "Error", { lastError: code });
-      })
-      .then(function () {
-        uploading = false;
-        render();
-        updateStorage();
+        setUploadStatus("No se pudo preparar una foto (" + code + ").", true);
+        return setItemStatus(item, "Error", { lastError: code }).then(function () { return false; });
       });
+  }
+
+  // Sube todas las pendientes, una por una. Se detiene en el primer error.
+  function uploadAll() {
+    if (uploading) { return; }
+    if (!persistent) {
+      setUploadStatus("Este navegador no permite guardar fotos; no es posible subir.", true);
+      return;
+    }
+    if (!window.Api) {
+      setUploadStatus("No se pudo cargar la conexión. Recarga la página.", true);
+      return;
+    }
+    if (!nextPending()) {
+      setUploadStatus("No hay fotos pendientes.", false);
+      return;
+    }
+
+    uploading = true;
+    batchDone = 0;
+    setStatus("", false);
+    render();
+
+    function finish(allOk) {
+      uploading = false;
+      if (allOk && batchDone > 0) {
+        setUploadStatus(batchDone === 1 ? "Foto subida. ¡Gracias!" :
+                        batchDone + " fotos subidas. ¡Gracias!", false);
+      }
+      render();
+      updateStorage();
+    }
+
+    function step() {
+      var item = nextPending();
+      if (!item) { finish(true); return; }
+      if (navigator.onLine === false) {
+        setUploadStatus("Sin conexión a Internet. Tus fotos siguen guardadas en el teléfono.", true);
+        finish(false);
+        return;
+      }
+      var total = batchDone + pendingCount();
+      setUploadStatus("Subiendo foto " + (batchDone + 1) + " de " + total + "…", false);
+      uploadOne(item).then(function (ok) {
+        if (ok) {
+          batchDone++;
+          step();
+        } else {
+          finish(false);
+        }
+      });
+    }
+
+    step();
   }
 
   function loadSaved() {
@@ -474,8 +513,8 @@
           r.status = "Reintentar";
           fixes.push(window.PhotoQueue.update(r.uploadId, { status: "Reintentar" }));
         }
-        var blob = new Blob([r.data], { type: r.mimeType });
-        items.push(toItem(r, blob));
+        var savedBlob = new Blob([r.data], { type: r.mimeType });
+        items.push(toItem(r, savedBlob));
         recovered++;
       });
       render();
@@ -532,7 +571,7 @@
     handleFiles(files);
   });
 
-  uploadBtn.addEventListener("click", uploadNext);
+  uploadBtn.addEventListener("click", uploadAll);
 
   document.addEventListener("wedding:photo", function (e) {
     var d = e.detail || {};
