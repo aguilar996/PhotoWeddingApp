@@ -6,6 +6,7 @@
   --earth: #5A4A3C;
   --ink: #3A3029;
   --dark: #2B241F;
+  --gold: #A8916F;
   --error: #8A3B2F;
   --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --sans: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
@@ -28,7 +29,7 @@ body {
   width: 100%;
   max-width: 520px;
   margin: 0 auto;
-  padding: 48px 20px calc(48px + env(safe-area-inset-bottom));
+  padding: 56px 22px calc(56px + env(safe-area-inset-bottom));
   text-align: center;
 }
 
@@ -44,25 +45,64 @@ body {
   border: 0;
 }
 
+/* Solo visible con ?debug=1 */
+html:not(.is-debug) .diag-debug { display: none !important; }
+
 /* ---------- Encabezado ---------- */
+.hero { margin-bottom: 40px; animation: fade-up 0.9s ease-out both; }
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .eyebrow {
   font-family: var(--sans);
   font-size: 11px;
   letter-spacing: 0.32em;
   text-transform: uppercase;
   color: var(--taupe);
-  margin: 0 0 24px;
+  margin: 0 0 22px;
 }
 h1 {
   font-weight: 400;
-  font-size: clamp(40px, 11vw, 60px);
-  line-height: 1.05;
+  font-size: clamp(38px, 10.5vw, 58px);
+  line-height: 1.08;
   color: var(--earth);
   margin: 0 0 18px;
 }
-.tagline { font-style: italic; font-size: 20px; margin: 0; }
-.divider { width: 56px; height: 1px; background: var(--taupe); opacity: 0.4; margin: 26px auto; }
-.lead { font-size: 17px; line-height: 1.6; color: var(--taupe); margin: 0 0 36px; }
+h1 .amp {
+  display: block;
+  font-style: italic;
+  font-size: 0.6em;
+  color: var(--gold);
+  margin: 2px 0;
+}
+.date {
+  font-family: var(--sans);
+  font-size: 11.5px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--taupe);
+  margin: 0 0 28px;
+}
+.tagline { font-style: italic; font-size: 20px; margin: 0; color: var(--ink); }
+.divider { width: 56px; height: 1px; background: var(--gold); opacity: 0.55; margin: 26px auto; }
+.lead { font-size: 17px; line-height: 1.6; color: var(--taupe); margin: 0; }
+
+.gallery-link {
+  display: inline-block;
+  font-family: var(--sans);
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--earth);
+  text-decoration: none;
+  border-bottom: 1px solid var(--beige);
+  padding: 10px 0 4px;
+}
+.gallery-link:active { color: var(--ink); border-color: var(--taupe); }
+.hero .gallery-link { margin-top: 26px; }
+.footer-link { margin-top: 52px; }
 
 /* ---------- Visor ---------- */
 .viewfinder {
@@ -156,14 +196,26 @@ h1 {
 
 .vf-label {
   position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
   font-family: var(--sans);
   font-size: 9.5px;
   letter-spacing: 0.28em;
   text-transform: uppercase;
   color: rgba(251, 248, 242, 0.75);
 }
-.vf-label.top { top: 22px; left: 0; right: 0; text-align: center; }
-.vf-label.bottom { bottom: 22px; left: 0; right: 0; text-align: center; }
+.vf-label.top { top: 20px; }
+.vf-label.bottom { bottom: 22px; }
+.vf-label.res { bottom: 40px; }
+.vf-monogram {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: rgba(251, 248, 242, 0.9);
+}
 
 .vf-flash {
   position: absolute;
@@ -229,7 +281,7 @@ h1 {
   width: 76px;
   height: 76px;
   border-radius: 50%;
-  border: 1.5px solid var(--taupe);
+  border: 1.5px solid var(--gold);
   background: var(--ivory);
   padding: 0;
   display: flex;
@@ -248,12 +300,12 @@ h1 {
 .shutter:active span { transform: scale(0.9); }
 .shutter:disabled { opacity: 0.6; }
 
-button:focus-visible, .btn:focus-visible { outline: 2px solid var(--taupe); outline-offset: 3px; }
+button:focus-visible, .btn:focus-visible, a:focus-visible { outline: 2px solid var(--taupe); outline-offset: 3px; }
 input[type="file"]:focus-visible + label { outline: 2px solid var(--taupe); outline-offset: 3px; }
 
 .status {
   min-height: 22px;
-  margin: 18px 0 0;
+  margin: 16px 0 0;
   font-family: var(--sans);
   font-size: 14px;
   line-height: 1.5;
@@ -261,19 +313,46 @@ input[type="file"]:focus-visible + label { outline: 2px solid var(--taupe); outl
 }
 .status.is-error { color: var(--error); }
 
-/* ---------- Galería del teléfono ---------- */
-.picker { margin-top: 34px; }
-.picker-note {
-  margin: 12px auto 0;
-  max-width: 340px;
-  font-family: var(--sans);
-  font-size: 12.5px;
-  line-height: 1.5;
+/* ---------- Separador y consejo de calidad ---------- */
+.or {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 40px 0 26px;
+  font-style: italic;
   color: var(--taupe);
+  font-size: 16px;
 }
+.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--beige); }
+
+.picker { margin-top: 0; }
+
+.tip {
+  max-width: 380px;
+  margin: 0 auto 20px;
+  padding: 16px 18px;
+  background: var(--cream);
+  border: 1px solid var(--beige);
+  border-top: 2px solid var(--gold);
+  font-family: var(--sans);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--earth);
+  text-align: left;
+}
+.tip strong {
+  display: block;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-style: italic;
+  font-size: 18px;
+  color: var(--earth);
+  margin-bottom: 6px;
+}
+.tip em { font-style: normal; font-weight: 600; color: var(--ink); }
 
 /* ---------- Bandeja de fotos ---------- */
-.tray-section { margin-top: 48px; text-align: left; }
+.tray-section { margin-top: 44px; text-align: left; }
 .tray-head {
   display: flex;
   align-items: baseline;
@@ -347,7 +426,7 @@ input[type="file"]:focus-visible + label { outline: 2px solid var(--taupe); outl
   cursor: pointer;
 }
 
-/* ---------- Diagnóstico (temporal) ---------- */
+/* ---------- Diagnóstico (solo ?debug=1) ---------- */
 .diag {
   margin-top: 56px;
   text-align: left;
@@ -378,3 +457,7 @@ input[type="file"]:focus-visible + label { outline: 2px solid var(--taupe); outl
 .diag li { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--beige); word-break: break-word; }
 .diag li:last-child { border-bottom: none; }
 .diag .small { margin: 12px 0 0; font-size: 11px; color: var(--taupe); word-break: break-word; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
