@@ -6,12 +6,12 @@
   <meta name="robots" content="noindex, nofollow">
   <meta name="theme-color" content="#FBF8F2">
   <title>Nuestro gran día</title>
-  <link rel="stylesheet" href="css/styles.css?v=7">
+  <link rel="stylesheet" href="css/styles.css?v=8">
 </head>
 <body>
   <main class="page">
     <header>
-      <p class="eyebrow">Fase 4 · Cola local</p>
+      <p class="eyebrow">Fase 8 · Primera subida</p>
       <h1>Nuestro gran día</h1>
       <p class="tagline">Juntos es nuestro lugar favorito</p>
       <div class="divider"></div>
@@ -72,21 +72,30 @@
       <ul class="tray" id="tray"></ul>
     </section>
 
+    <section class="picker" aria-label="Subida">
+      <button type="button" class="btn btn-primary" id="btn-upload" disabled>No hay fotos pendientes</button>
+      <p class="status" id="upload-status" role="status" aria-live="polite"></p>
+    </section>
+
     <section class="diag" aria-labelledby="diag-title">
       <h2 id="diag-title">Diagnóstico técnico</h2>
       <ul id="diag-list"></ul>
       <p class="small" id="diag-camera">Cámara: todavía no abierta</p>
       <p class="small" id="diag-storage">Almacenamiento: comprobando…</p>
+      <h3>Subidas</h3>
+      <ul id="diag-uploads"></ul>
       <h3>Archivos analizados</h3>
       <ul id="diag-files"></ul>
       <p class="small" id="diag-ua"></p>
-      <p class="small">Versión: fase-4 · v4</p>
+      <p class="small">Versión: fase-8 · v1</p>
     </section>
   </main>
 
-  <script src="js/diagnostics.js?v=7"></script>
-  <script src="js/queue.js?v=7"></script>
-  <script src="js/camera.js?v=7"></script>
-  <script src="js/photos.js?v=7"></script>
+  <script src="js/config.js?v=8"></script>
+  <script src="js/api.js?v=8"></script>
+  <script src="js/diagnostics.js?v=8"></script>
+  <script src="js/queue.js?v=8"></script>
+  <script src="js/camera.js?v=8"></script>
+  <script src="js/photos.js?v=8"></script>
 </body>
 </html>
