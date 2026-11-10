@@ -13,6 +13,7 @@
   var PERMANENT = ["UNSUPPORTED_TYPE", "FILE_TOO_LARGE", "EMPTY_FILE", "INVALID_DATA",
                    "INVALID_UPLOAD_ID", "MISSING_DATA", "CONFLICT", "NO_LOCAL_DATA"];
   var ACTIVE = ["En espera", "Subiendo", "Reintentar"];
+  var OFFLINE_MSG = "Sin conexión. Tus fotos están guardadas y se subirán solas cuando vuelva la conexión.";
 
   var input = document.getElementById("file-input");
   var tray = document.getElementById("tray");
@@ -35,7 +36,7 @@
   var timer = null;
   var progTimer = null;
   var batchDone = 0;
-  var rateBps = 250000;              // velocidad estimada (bytes/s), se ajusta sola
+  var rateBps = 250000;
   var persistent = true;
   var persistGranted = null;
   var ready;
@@ -341,7 +342,6 @@
       render();
       updateStorage();
     }, function (err) {
-      // Queda marcada como «Subida»; se limpiará al volver a abrir la página
       console.error("No se pudo limpiar la foto subida:", err);
     });
   }
@@ -446,9 +446,7 @@
 
   function showNet(online) {
     netStatus.hidden = online;
-    if (!online) {
-      netStatus.textContent = "Sin conexión. Tus fotos están guardadas en este teléfono y se subirán solas cuando vuelva la conexión.";
-    }
+    if (!online) { netStatus.textContent = OFFLINE_MSG; }
   }
 
   /* ---------- Progreso estimado ---------- */
@@ -485,6 +483,7 @@
     if (!permanent && navigator.onLine === false) {
       addLog(diagUploads, "⏸ " + item.filename + " · sin conexión · " + code);
       showNet(false);
+      setUploadStatus(OFFLINE_MSG, false);
       return setItemStatus(item, "Reintentar", {
         attempts: Math.max(0, attempts - 1), nextAttemptAt: 0, lastError: code, progress: 0
       });
@@ -578,8 +577,8 @@
       setUploadStatus(errors === 1 ? "Una foto no se pudo subir. Toca «Reintentar ahora»." :
                       errors + " fotos no se pudieron subir. Toca «Reintentar ahora».", true);
     } else if (batchDone > 0) {
-      setUploadStatus(batchDone === 1 ? "Foto subida. ¡Gracias!" :
-                      batchDone + " fotos subidas. ¡Gracias!", false);
+      setUploadStatus(batchDone === 1 ? "Foto compartida. ¡Gracias!" :
+                      batchDone + " fotos compartidas. ¡Gracias!", false);
     }
     batchDone = 0;
   }
@@ -590,6 +589,7 @@
     if (timer) { clearTimeout(timer); timer = null; }
     if (navigator.onLine === false) {
       showNet(false);
+      if (count(ACTIVE)) { setUploadStatus(OFFLINE_MSG, false); }
       render();
       return;
     }
@@ -631,7 +631,6 @@
       });
   }
 
-  // Devuelve a la cola lo que falló por red (no los errores permanentes)
   function revive(resetSchedule) {
     var changes = [];
     items.forEach(function (it) {
@@ -672,17 +671,19 @@
       var fixes = [];
       records.forEach(function (r) {
         if (!r) { return; }
-        // Ya confirmada por el servidor: solo falta limpiarla del teléfono
         if (r.status === "Subida") {
           fixes.push(window.PhotoQueue.remove(r.uploadId).catch(function () { return null; }));
           return;
         }
         if (!r.data) { return; }
-        // Se cerró a mitad de una subida: vuelve a la cola (el servidor evita duplicados)
         if (r.status === "Subiendo") {
           r.status = "Reintentar";
           r.nextAttemptAt = 0;
           fixes.push(window.PhotoQueue.update(r.uploadId, { status: "Reintentar", nextAttemptAt: 0 }));
+        }
+        if (r.lastError) {
+          addLog(diagUploads, "↺ " + r.filename + " · recuperada · estado: " + r.status +
+                 " · intentos: " + (r.attempts || 0) + " · último error: " + r.lastError);
         }
         var savedBlob = new Blob([r.data], { type: r.mimeType });
         items.push(toItem(r, savedBlob));
@@ -748,11 +749,13 @@
 
   window.addEventListener("online", function () {
     showNet(true);
+    setUploadStatus("", false);
     revive(true);
   });
 
   window.addEventListener("offline", function () {
     showNet(false);
+    if (count(ACTIVE)) { setUploadStatus(OFFLINE_MSG, false); }
     render();
   });
 
