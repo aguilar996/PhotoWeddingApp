@@ -5,20 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex, nofollow">
   <meta name="theme-color" content="#FBF8F2">
-  <title>Nuestro gran día</title>
-  <link rel="stylesheet" href="css/styles.css?v=13">
-  <link rel="stylesheet" href="css/queue.css?v=13">
+  <title>Juan Diego &amp; Doménica · Nuestro gran día</title>
+  <link rel="stylesheet" href="css/styles.css?v=15">
+  <link rel="stylesheet" href="css/queue.css?v=15">
 </head>
 <body>
   <main class="page">
-    <ul id="diag-errors" class="status is-error" hidden style="list-style:none;padding:0;margin:0 0 24px;text-align:left;"></ul>
+    <ul id="diag-errors" class="status is-error diag-debug" hidden style="list-style:none;padding:0;margin:0 0 24px;text-align:left;"></ul>
 
-    <header>
-      <p class="eyebrow">Fase 10 · Subida automática</p>
-      <h1>Nuestro gran día</h1>
+    <header class="hero">
+      <p class="eyebrow">Nuestro gran día</p>
+      <h1>Juan Diego <span class="amp">&amp;</span> Doménica</h1>
+      <p class="date">14 · 04 · 2027 · Montréal</p>
       <p class="tagline">Juntos es nuestro lugar favorito</p>
       <div class="divider"></div>
       <p class="lead">Comparte con nosotros los momentos que atesoraremos para siempre.</p>
+      <a class="gallery-link" href="gallery.html">Ver fotos compartidas →</a>
     </header>
 
     <p class="net-status" id="net-status" role="status" aria-live="polite" hidden></p>
@@ -41,8 +43,9 @@
           <span class="vf-corner bl"></span>
           <span class="vf-corner br"></span>
           <span class="vf-center"></span>
-          <span class="vf-label top">Nuestro gran día</span>
-          <span class="vf-label bottom" id="vf-res">—</span>
+          <span class="vf-label top vf-monogram">Mena &amp; JD</span>
+          <span class="vf-label res diag-debug" id="vf-res">—</span>
+          <span class="vf-label bottom">14 · 04 · 2027</span>
         </div>
 
         <div class="vf-flash" id="vf-flash"></div>
@@ -61,10 +64,15 @@
       </div>
     </section>
 
+    <p class="or">o</p>
+
     <section class="picker" aria-label="Galería del teléfono">
+      <div class="tip">
+        <strong>Para la mejor calidad</strong>
+        Toca «Elegir fotos de la galería» y luego <em>«Tomar foto»</em> en iPhone o <em>«Cámara»</em> en Android: usarás la cámara de tu teléfono con resolución completa.
+      </div>
       <input type="file" id="file-input" class="visually-hidden" accept="image/jpeg,image/png,image/webp" multiple>
       <label for="file-input" class="btn btn-secondary">Elegir fotos de la galería</label>
-      <p class="picker-note">Para la máxima calidad, también puedes elegir «Tomar foto» desde este botón.</p>
       <p class="status" id="picker-status" role="status" aria-live="polite"></p>
     </section>
 
@@ -85,7 +93,11 @@
       <ul class="tray" id="tray"></ul>
     </section>
 
-    <section class="diag" aria-labelledby="diag-title">
+    <div class="footer-link">
+      <a class="gallery-link" href="gallery.html">Ver fotos compartidas →</a>
+    </div>
+
+    <section class="diag diag-debug" aria-labelledby="diag-title">
       <h2 id="diag-title">Diagnóstico técnico</h2>
       <ul id="diag-list"></ul>
       <p class="small" id="diag-camera">Cámara: todavía no abierta</p>
@@ -95,15 +107,15 @@
       <h3>Archivos analizados</h3>
       <ul id="diag-files"></ul>
       <p class="small" id="diag-ua"></p>
-      <p class="small">Versión web: fase-10 · v1</p>
+      <p class="small">Versión web: fase-13 · v1</p>
     </section>
   </main>
 
-  <script src="js/diagnostics.js?v=13"></script>
-  <script src="js/config.js?v=13"></script>
-  <script src="js/api.js?v=13"></script>
-  <script src="js/queue.js?v=13"></script>
-  <script src="js/camera.js?v=13"></script>
-  <script src="js/photos.js?v=13"></script>
+  <script src="js/diagnostics.js?v=15"></script>
+  <script src="js/config.js?v=15"></script>
+  <script src="js/api.js?v=15"></script>
+  <script src="js/queue.js?v=15"></script>
+  <script src="js/camera.js?v=15"></script>
+  <script src="js/photos.js?v=15"></script>
 </body>
 </html>
