@@ -1,0 +1,53 @@
+.net-status {
+  margin: 0 0 24px;
+  padding: 12px 16px;
+  background: var(--cream);
+  border: 1px solid var(--beige);
+  border-left: 3px solid var(--taupe);
+  font-family: var(--sans);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--earth);
+  text-align: left;
+}
+
+.upload-section { margin-top: 28px; }
+
+.progress {
+  width: 100%;
+  max-width: 340px;
+  height: 3px;
+  margin: 0 auto 12px;
+  background: var(--beige);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  width: 0;
+  background: var(--earth);
+  transition: width 0.3s ease;
+}
+
+.thumb.is-uploading img { opacity: 0.75; }
+.thumb.is-error { outline: 1.5px solid var(--error); outline-offset: -1.5px; }
+
+.thumb-retry {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(251, 248, 242, 0.92);
+  color: var(--error);
+  font-size: 16px;
+  line-height: 32px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.thumb-remove:disabled { opacity: 0; pointer-events: none; }
+
+#btn-upload { margin-top: 6px; }
