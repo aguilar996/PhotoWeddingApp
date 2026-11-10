@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Prueba de carga</title>
+  <link rel="stylesheet" href="css/styles.css?v=17">
+</head>
+<body>
+  <main class="page">
+    <p class="eyebrow">Fase 14 · Carga</p>
+    <h1>Prueba de carga</h1>
+    <p class="lead">Simula varios teléfonos subiendo a la vez.</p>
+
+    <p class="status">
+      <label>Teléfonos
+        <select id="s-devices">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+        </select>
+      </label>
+      &nbsp;
+      <label>Fotos por teléfono
+        <select id="s-photos">
+          <option value="2">2</option>
+          <option value="3">3</option>
+        </select>
+      </label>
+    </p>
+
+    <button type="button" class="btn btn-primary" id="btn-stress">Iniciar prueba</button>
+    <p class="status" id="s-summary" role="status" aria-live="polite"></p>
+
+    <section class="diag">
+      <h2>Registro</h2>
+      <ul id="s-log"></ul>
+      <p class="small">Versión: fase-14 · v1</p>
+    </section>
+  </main>
+
+  <script src="js/config.js?v=17"></script>
+  <script src="js/api.js?v=17"></script>
+  <script src="js/stress.js?v=17"></script>
+</body>
+</html>
