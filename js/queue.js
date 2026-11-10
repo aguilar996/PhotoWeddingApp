@@ -4,7 +4,6 @@
   var DB_NAME = "nuestro-gran-dia";
   var DB_VERSION = 1;
   var STORE = "photos";
-  var DELETE_METHOD = "del" + "ete";
   var dbPromise = null;
 
   function open() {
@@ -114,7 +113,8 @@
 
     remove: function (uploadId) {
       return runSafe("readwrite", function (store) {
-        storeuploadId;
+        var fn = store["delete"];
+        fn.call(store, uploadId);
       });
     },
 
